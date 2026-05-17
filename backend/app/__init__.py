@@ -9,9 +9,11 @@ from app.routes.lesson_plans_routes import lesson_plans_bp
 from app.swagger import init_swagger
 
 
-def create_app(config_class=Config):
+def create_app(config_class=Config, test_config=None):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    if test_config:
+        app.config.update(test_config)
 
     CORS(app)
     init_db(app)
