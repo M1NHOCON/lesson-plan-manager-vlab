@@ -3,6 +3,7 @@ from flask_cors import CORS
 
 from app.config import Config
 from app.database import init_db
+from app.routes.ai_routes import ai_bp
 from app.routes.health_routes import health_bp
 from app.routes.lesson_plans_routes import lesson_plans_bp
 from app.swagger import init_swagger
@@ -18,6 +19,7 @@ def create_app(config_class=Config):
 
     app.register_blueprint(health_bp)
     app.register_blueprint(lesson_plans_bp)
+    app.register_blueprint(ai_bp)
 
     @app.errorhandler(404)
     def handle_not_found(error):

@@ -123,6 +123,57 @@ swagger_template = {
                 "error": {"type": "string", "example": "Lesson plan not found"},
             },
         },
+        "AIRecommendationRequest": {
+            "type": "object",
+            "required": ["title", "discipline", "summary"],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "example": "Introducao ao OSPF",
+                },
+                "discipline": {
+                    "type": "string",
+                    "example": "Redes de Computadores",
+                },
+                "summary": {
+                    "type": "string",
+                    "example": "Aula introdutoria sobre roteamento dinamico usando OSPF.",
+                },
+            },
+        },
+        "AIRecommendationResponse": {
+            "type": "object",
+            "properties": {
+                "contents": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "example": [
+                        "Conceito de roteamento dinamico",
+                        "Funcionamento basico do OSPF",
+                        "Areas OSPF",
+                    ],
+                },
+                "related_topics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "example": [
+                        "Protocolos de roteamento",
+                        "Topologias de rede",
+                        "Convergencia de rede",
+                    ],
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "example": ["OSPF", "Redes", "Roteamento"],
+                },
+                "source": {
+                    "type": "string",
+                    "example": "mock",
+                    "description": "Returned when fallback/mock recommendations are used.",
+                },
+            },
+        },
     },
 }
 

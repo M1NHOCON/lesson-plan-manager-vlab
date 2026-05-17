@@ -4,3 +4,4 @@ python-dotenv
 pydantic
 Flask-SQLAlchemy
 flasgger
+openai
