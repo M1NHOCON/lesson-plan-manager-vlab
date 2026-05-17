@@ -3,6 +3,8 @@ import logging
 import os
 import re
 
+from google import genai
+from google.genai import types
 from openai import OpenAI
 
 from app.utils.logger import get_logger
@@ -13,38 +15,62 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 MOCK_API_KEYS = {None, "", "your_api_key_here"}
 OPENAI_MODEL = "gpt-4o-mini"
+GEMINI_MODEL = "gemini-2.5-flash"
 OPENAI_TIMEOUT_SECONDS = 20
+GEMINI_TIMEOUT_SECONDS = 20
+SUPPORTED_PROVIDERS = {"openai", "gemini"}
 
 
 def generate_recommendations(payload, api_key=None, provider=None):
     logger.info("AI recommendation requested")
-    api_key = api_key or os.getenv("LLM_API_KEY")
-    provider = provider or os.getenv("LLM_PROVIDER")
+    provider = _normalize_provider(provider or os.getenv("LLM_PROVIDER"))
+    api_key = _resolve_api_key(api_key, provider)
+    logger.info("AI provider selected: %s", provider or "mock")
 
     if _should_use_mock(api_key, provider):
         logger.info("Using mock AI recommendations")
         return _mock_recommendations(payload)
 
     try:
-        logger.info("OpenAI recommendation request started")
-        result = _call_openai(payload, api_key)
-        logger.info("OpenAI recommendation request succeeded")
-        return {**result, "source": "openai"}
+        logger.info("%s recommendation request started", provider.title())
+        result = _call_provider(payload, api_key, provider)
+        logger.info("%s recommendation request succeeded", provider.title())
+        return {**result, "source": provider}
     except Exception as error:
-        logger.exception("OpenAI recommendation request failed: %s", error)
-        return _fallback_with_warning(payload)
+        logger.exception("%s recommendation request failed: %s", provider.title(), error)
+        return _fallback_with_warning(payload, provider)
+
+
+def _normalize_provider(provider):
+    return (provider or "").strip().lower()
+
+
+def _resolve_api_key(api_key, provider):
+    if provider == "gemini":
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if _is_valid_api_key(gemini_api_key):
+            return gemini_api_key
+        return api_key or os.getenv("LLM_API_KEY")
+
+    if _is_valid_api_key(api_key):
+        return api_key
+
+    return os.getenv("LLM_API_KEY")
+
+
+def _is_valid_api_key(api_key):
+    return (api_key or "").strip() not in MOCK_API_KEYS
 
 
 def _should_use_mock(api_key, provider):
     normalized_api_key = (api_key or "").strip()
-    normalized_provider = (provider or "").strip().lower()
 
     if normalized_api_key in MOCK_API_KEYS:
-        logger.info("Fallback activated: missing OpenAI API key")
+        logger.info("Fallback activated: missing API key")
         return True
 
-    if normalized_provider != "openai":
-        logger.info("Fallback activated: provider is not openai")
+    if provider not in SUPPORTED_PROVIDERS:
+        logger.info("Fallback activated: unsupported provider")
         return True
 
     return False
@@ -66,7 +92,7 @@ def _build_prompt(payload):
 
 
 def _call_openai(payload, api_key):
-    client = OpenAI(api_key=os.getenv("LLM_API_KEY") or api_key)
+    client = OpenAI(api_key=api_key)
     prompt = _build_prompt(payload)
 
     response = client.chat.completions.create(
@@ -87,13 +113,60 @@ def _call_openai(payload, api_key):
     )
 
     content = response.choices[0].message.content
-    parsed_content = json.loads(content)
+    parsed_content = _parse_ai_json_response(content)
     return _validate_ai_response(parsed_content)
+
+
+def _call_provider(payload, api_key, provider):
+    if provider == "gemini":
+        return _call_gemini(payload, api_key)
+
+    return _call_openai(payload, api_key)
+
+
+def _call_gemini(payload, api_key):
+    client = genai.Client(api_key=api_key)
+    prompt = _build_prompt(payload)
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.4,
+            response_mime_type="application/json",
+            http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_SECONDS * 1000),
+        ),
+    )
+
+    parsed_content = _parse_ai_json_response(response.text)
+    return _validate_ai_response(parsed_content)
+
+
+def _parse_ai_json_response(content):
+    if not content:
+        raise ValueError("AI response content is empty")
+
+    cleaned = content.strip()
+    fenced_match = re.search(
+        r"```(?:json)?\s*(\{.*?\})\s*```",
+        cleaned,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fenced_match:
+        cleaned = fenced_match.group(1).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        object_match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+        if not object_match:
+            raise
+        return json.loads(object_match.group(0))
 
 
 def _validate_ai_response(result):
     if not isinstance(result, dict):
-        raise ValueError("OpenAI response must be a JSON object")
+        raise ValueError("AI response must be a JSON object")
 
     missing_fields = [
         field
@@ -101,18 +174,21 @@ def _validate_ai_response(result):
         if field not in result
     ]
     if missing_fields:
-        raise ValueError(f"OpenAI response missing fields: {missing_fields}")
+        raise ValueError(f"AI response missing fields: {missing_fields}")
 
-    contents = _string_list(result.get("contents"))
-    related_topics = _string_list(result.get("related_topics"))
-    tags = _string_list(result.get("tags"))[:3]
+    contents = _required_string_list(result.get("contents"), "contents")
+    related_topics = _required_string_list(
+        result.get("related_topics"),
+        "related_topics",
+    )
+    tags = _required_string_list(result.get("tags"), "tags")
 
     if not contents:
-        raise ValueError("OpenAI response contents must be a non-empty string list")
+        raise ValueError("AI response contents must be a non-empty string list")
     if not related_topics:
-        raise ValueError("OpenAI response related_topics must be a non-empty string list")
+        raise ValueError("AI response related_topics must be a non-empty string list")
     if len(tags) != 3:
-        raise ValueError("OpenAI response tags must contain exactly 3 strings")
+        raise ValueError("AI response tags must contain exactly 3 strings")
 
     return {
         "contents": contents,
@@ -121,12 +197,20 @@ def _validate_ai_response(result):
     }
 
 
-def _fallback_with_warning(payload):
+def _fallback_with_warning(payload, provider):
     logger.info("Fallback mock activated")
     fallback = _mock_recommendations(payload)
     fallback["source"] = "mock"
-    fallback["warning"] = "OpenAI failed; mock recommendations returned"
+    fallback["warning"] = f"{_provider_label(provider)} failed; mock recommendations returned"
     return fallback
+
+
+def _provider_label(provider):
+    if provider == "openai":
+        return "OpenAI"
+    if provider == "gemini":
+        return "Gemini"
+    return "AI provider"
 
 
 def _mock_recommendations(payload):
@@ -212,3 +296,13 @@ def _string_list(value):
         return []
 
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _required_string_list(value, field_name):
+    if not isinstance(value, list):
+        raise ValueError(f"AI response {field_name} must be a list")
+
+    if not all(isinstance(item, str) and item.strip() for item in value):
+        raise ValueError(f"AI response {field_name} must contain only non-empty strings")
+
+    return [item.strip() for item in value]

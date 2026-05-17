@@ -169,9 +169,9 @@ swagger_template = {
                 },
                 "source": {
                     "type": "string",
-                    "enum": ["openai", "mock"],
-                    "example": "openai",
-                    "description": "Recommendation source. Returns mock when OpenAI is unavailable or not configured.",
+                    "enum": ["openai", "gemini", "mock"],
+                    "example": "gemini",
+                    "description": "Recommendation source. Returns mock when the selected AI provider is unavailable or not configured.",
                 },
             },
         },
