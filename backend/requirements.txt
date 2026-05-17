@@ -5,3 +5,4 @@ pydantic
 Flask-SQLAlchemy
 flasgger
 openai
+google-genai

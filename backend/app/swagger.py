@@ -169,8 +169,9 @@ swagger_template = {
                 },
                 "source": {
                     "type": "string",
-                    "example": "mock",
-                    "description": "Returned when fallback/mock recommendations are used.",
+                    "enum": ["openai", "mock"],
+                    "example": "openai",
+                    "description": "Recommendation source. Returns mock when OpenAI is unavailable or not configured.",
                 },
             },
         },

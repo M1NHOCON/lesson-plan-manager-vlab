@@ -1,44 +1,63 @@
 import json
+import logging
+import os
 import re
-import urllib.error
-import urllib.request
+
+from openai import OpenAI
 
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 MOCK_API_KEYS = {None, "", "your_api_key_here"}
+OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_TIMEOUT_SECONDS = 20
 
 
 def generate_recommendations(payload, api_key=None, provider=None):
     logger.info("AI recommendation requested")
+    api_key = api_key or os.getenv("LLM_API_KEY")
+    provider = provider or os.getenv("LLM_PROVIDER")
 
-    if not _has_valid_api_key(api_key):
+    if _should_use_mock(api_key, provider):
         logger.info("Using mock AI recommendations")
         return _mock_recommendations(payload)
 
     try:
-        logger.info("Calling real AI provider: %s", provider or "openai")
-        result = _call_ai_provider(payload, api_key, provider)
-        return _normalize_ai_response(result)
+        logger.info("OpenAI recommendation request started")
+        result = _call_openai(payload, api_key)
+        logger.info("OpenAI recommendation request succeeded")
+        return {**result, "source": "openai"}
     except Exception as error:
-        logger.exception("AI provider failed: %s", error)
-        fallback = _mock_recommendations(payload)
-        fallback["source"] = "mock"
-        fallback["warning"] = "AI provider failed; mock recommendations returned"
-        return fallback
+        logger.exception("OpenAI recommendation request failed: %s", error)
+        return _fallback_with_warning(payload)
 
 
-def _has_valid_api_key(api_key):
-    return api_key not in MOCK_API_KEYS
+def _should_use_mock(api_key, provider):
+    normalized_api_key = (api_key or "").strip()
+    normalized_provider = (provider or "").strip().lower()
+
+    if normalized_api_key in MOCK_API_KEYS:
+        logger.info("Fallback activated: missing OpenAI API key")
+        return True
+
+    if normalized_provider != "openai":
+        logger.info("Fallback activated: provider is not openai")
+        return True
+
+    return False
 
 
 def _build_prompt(payload):
     return (
-        "Voce e um Assistente Pedagogico. Gere sugestoes para um plano de aula "
-        "com conteudos complementares, topicos relacionados e exatamente 3 tags. "
-        "Responda exclusivamente com JSON valido, sem markdown, no formato: "
+        "Voce e um Assistente Pedagogico especializado em planejamento de aulas. "
+        "Com base no titulo, disciplina e resumo abaixo, gere sugestoes objetivas "
+        "para enriquecer o plano de aula. A resposta deve conter conteudos "
+        "complementares, topicos relacionados e exatamente 3 tags. "
+        "Responda exclusivamente com JSON valido, sem markdown, sem comentarios e "
+        "sem explicacoes adicionais. Use obrigatoriamente este formato: "
         '{"contents":["..."],"related_topics":["..."],"tags":["...","...","..."]}\n\n'
         f"Titulo: {payload['title']}\n"
         f"Disciplina: {payload['discipline']}\n"
@@ -46,105 +65,68 @@ def _build_prompt(payload):
     )
 
 
-def _call_ai_provider(payload, api_key, provider):
-    normalized_provider = (provider or "openai").strip().lower()
+def _call_openai(payload, api_key):
+    client = OpenAI(api_key=os.getenv("LLM_API_KEY") or api_key)
     prompt = _build_prompt(payload)
 
-    if normalized_provider in {"gemini", "google", "google_gemini"}:
-        return _call_gemini(prompt, api_key)
-
-    return _call_openai(prompt, api_key)
-
-
-def _call_openai(prompt, api_key):
-    body = {
-        "model": "gpt-4o-mini",
-        "messages": [
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
             {
                 "role": "system",
-                "content": "Voce retorna apenas JSON valido, sem markdown.",
+                "content": (
+                    "Voce e um Assistente Pedagogico. Retorne apenas JSON valido, "
+                    "sem markdown e sem explicacoes."
+                ),
             },
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.4,
-    }
-
-    data = _post_json(
-        "https://api.openai.com/v1/chat/completions",
-        body,
-        {"Authorization": f"Bearer {api_key}"},
-    )
-    content = data["choices"][0]["message"]["content"]
-    return _parse_json_content(content)
-
-
-def _call_gemini(prompt, api_key):
-    body = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt,
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.4,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    data = _post_json(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
-        body,
-        {},
-    )
-    content = data["candidates"][0]["content"]["parts"][0]["text"]
-    return _parse_json_content(content)
-
-
-def _post_json(url, body, headers):
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            **headers,
-        },
-        method="POST",
+        temperature=0.4,
+        response_format={"type": "json_object"},
+        timeout=OPENAI_TIMEOUT_SECONDS,
     )
 
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        details = error.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"AI provider returned HTTP {error.code}: {details}") from error
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"AI provider request failed: {error.reason}") from error
+    content = response.choices[0].message.content
+    parsed_content = json.loads(content)
+    return _validate_ai_response(parsed_content)
 
 
-def _parse_json_content(content):
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", content, flags=re.DOTALL)
-        if not match:
-            raise
-        return json.loads(match.group(0))
+def _validate_ai_response(result):
+    if not isinstance(result, dict):
+        raise ValueError("OpenAI response must be a JSON object")
 
+    missing_fields = [
+        field
+        for field in ("contents", "related_topics", "tags")
+        if field not in result
+    ]
+    if missing_fields:
+        raise ValueError(f"OpenAI response missing fields: {missing_fields}")
 
-def _normalize_ai_response(result):
+    contents = _string_list(result.get("contents"))
+    related_topics = _string_list(result.get("related_topics"))
     tags = _string_list(result.get("tags"))[:3]
-    while len(tags) < 3:
-        tags.append("Educacao")
+
+    if not contents:
+        raise ValueError("OpenAI response contents must be a non-empty string list")
+    if not related_topics:
+        raise ValueError("OpenAI response related_topics must be a non-empty string list")
+    if len(tags) != 3:
+        raise ValueError("OpenAI response tags must contain exactly 3 strings")
 
     return {
-        "contents": _string_list(result.get("contents")),
-        "related_topics": _string_list(result.get("related_topics")),
+        "contents": contents,
+        "related_topics": related_topics,
         "tags": tags,
     }
+
+
+def _fallback_with_warning(payload):
+    logger.info("Fallback mock activated")
+    fallback = _mock_recommendations(payload)
+    fallback["source"] = "mock"
+    fallback["warning"] = "OpenAI failed; mock recommendations returned"
+    return fallback
 
 
 def _mock_recommendations(payload):
