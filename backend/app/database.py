@@ -1,6 +1,11 @@
-# Database configuration will be added in a future step.
+from flask_sqlalchemy import SQLAlchemy
+
+
+db = SQLAlchemy()
 
 
 def init_db(app):
-    """Placeholder for future database initialization."""
-    return None
+    db.init_app(app)
+
+    with app.app_context():
+        db.create_all()
