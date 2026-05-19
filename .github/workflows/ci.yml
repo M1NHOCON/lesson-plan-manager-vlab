@@ -45,7 +45,7 @@ jobs:
         env:
           FLASK_ENV: testing
           FLASK_DEBUG: "False"
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
           LLM_PROVIDER: mock
           LLM_API_KEY: your_api_key_here
         run: |
