@@ -1,12 +1,31 @@
 services:
   backend:
+    container_name: lesson-plan-backend
     build:
       context: ./backend
-      dockerfile: Dockerfile
     ports:
       - "5000:5000"
-    env_file:
-      - ./backend/.env.example
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "False"
+      PORT: "5000"
+      DATABASE_URL: sqlite:////app/instance/lesson_plans.db
+      LLM_PROVIDER: mock
+      LLM_API_KEY: your_api_key_here
+      GEMINI_MODEL: gemini-2.5-flash-lite
     volumes:
-      - ./backend:/app
-    # Dockerfile will be added in a future step.
+      - backend_data:/app/instance
+
+  frontend:
+    container_name: lesson-plan-frontend
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
