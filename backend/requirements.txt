@@ -6,3 +6,4 @@ Flask-SQLAlchemy
 flasgger
 openai
 google-genai
+gunicorn
