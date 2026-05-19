@@ -106,6 +106,20 @@ docker compose down
 docker compose down -v
 ```
 
+## Observabilidade
+
+O backend possui endpoint de health check em `GET /health` e registra logs das principais operacoes da API. Os logs usam o formato `[LEVEL] mensagem`, aparecem no terminal ao rodar com `python run.py` ou via Docker, e evitam expor chaves de API ou payloads completos.
+
+As operacoes de CRUD registram criacao, listagem, busca, atualizacao, exclusao e casos de plano nao encontrado. O Smart Assist registra titulo, disciplina, provider, source, fallback e latencia. Quando o provider disponibiliza uso de tokens de forma segura, o backend tambem pode registrar `TokenUsage`.
+
+Exemplos:
+
+```text
+[INFO] LessonPlan Created: id=1, title="Introdução ao OSPF", discipline="Redes"
+[INFO] AI Request: Title="Introdução ao OSPF", Discipline="Redes", Provider="gemini", Source="gemini", Latency=1.4s
+[WARNING] AI Fallback: Provider="gemini", Reason="503 UNAVAILABLE", Source="mock", Latency=0.8s
+```
+
 ## Próximos passos planejados
 
 1. CRUD de planos de aula.

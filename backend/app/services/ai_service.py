@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from google import genai
 from google.genai import types
@@ -22,22 +23,63 @@ SUPPORTED_PROVIDERS = {"openai", "gemini"}
 
 
 def generate_recommendations(payload, api_key=None, provider=None):
-    logger.info("AI recommendation requested")
+    title = payload.get("title")
+    discipline = payload.get("discipline")
     provider = _normalize_provider(provider or os.getenv("LLM_PROVIDER"))
     api_key = _resolve_api_key(api_key, provider)
-    logger.info("AI provider selected: %s", provider or "mock")
+    provider_label = provider or "mock"
+    logger.info(
+        'AI Request Started: Title="%s", Discipline="%s", Provider="%s"',
+        title,
+        discipline,
+        provider_label,
+    )
 
-    if _should_use_mock(api_key, provider):
-        logger.info("Using mock AI recommendations")
+    mock_reason = _mock_reason(api_key, provider)
+    if mock_reason:
+        logger.info(
+            'AI Mock Used: Title="%s", Discipline="%s", Reason="%s", Source="mock"',
+            title,
+            discipline,
+            mock_reason,
+        )
         return _mock_recommendations(payload)
 
+    started_at = time.perf_counter()
     try:
-        logger.info("%s recommendation request started", provider.title())
-        result = _call_provider(payload, api_key, provider)
-        logger.info("%s recommendation request succeeded", provider.title())
+        result, token_usage = _call_provider(payload, api_key, provider)
+        latency = _format_latency(started_at)
+        if token_usage is None:
+            logger.info(
+                'AI Request: Title="%s", Discipline="%s", Provider="%s", '
+                'Source="%s", Latency=%ss',
+                title,
+                discipline,
+                provider,
+                provider,
+                latency,
+            )
+        else:
+            logger.info(
+                'AI Request: Title="%s", Discipline="%s", Provider="%s", '
+                'Source="%s", TokenUsage=%s, Latency=%ss',
+                title,
+                discipline,
+                provider,
+                provider,
+                token_usage,
+                latency,
+            )
         return {**result, "source": provider}
     except Exception as error:
-        logger.exception("%s recommendation request failed: %s", provider.title(), error)
+        latency = _format_latency(started_at)
+        reason = _short_error(error)
+        logger.warning(
+            'AI Fallback: Provider="%s", Reason="%s", Source="mock", Latency=%ss',
+            provider,
+            reason,
+            latency,
+        )
         return _fallback_with_warning(payload, provider)
 
 
@@ -62,18 +104,16 @@ def _is_valid_api_key(api_key):
     return (api_key or "").strip() not in MOCK_API_KEYS
 
 
-def _should_use_mock(api_key, provider):
+def _mock_reason(api_key, provider):
     normalized_api_key = (api_key or "").strip()
 
     if normalized_api_key in MOCK_API_KEYS:
-        logger.info("Fallback activated: missing API key")
-        return True
+        return "missing or placeholder API key"
 
     if provider not in SUPPORTED_PROVIDERS:
-        logger.info("Fallback activated: unsupported provider")
-        return True
+        return "unsupported provider"
 
-    return False
+    return None
 
 
 def _build_prompt(payload):
@@ -114,7 +154,8 @@ def _call_openai(payload, api_key):
 
     content = response.choices[0].message.content
     parsed_content = _parse_ai_json_response(content)
-    return _validate_ai_response(parsed_content)
+    token_usage = _extract_openai_token_usage(response)
+    return _validate_ai_response(parsed_content), token_usage
 
 
 def _call_provider(payload, api_key, provider):
@@ -139,7 +180,8 @@ def _call_gemini(payload, api_key):
     )
 
     parsed_content = _parse_ai_json_response(response.text)
-    return _validate_ai_response(parsed_content)
+    token_usage = _extract_gemini_token_usage(response)
+    return _validate_ai_response(parsed_content), token_usage
 
 
 def _parse_ai_json_response(content):
@@ -198,11 +240,35 @@ def _validate_ai_response(result):
 
 
 def _fallback_with_warning(payload, provider):
-    logger.info("Fallback mock activated")
     fallback = _mock_recommendations(payload)
     fallback["source"] = "mock"
     fallback["warning"] = f"{_provider_label(provider)} failed; mock recommendations returned"
     return fallback
+
+
+def _format_latency(started_at):
+    return f"{time.perf_counter() - started_at:.2f}"
+
+
+def _short_error(error):
+    message = str(error).strip()
+    if not message:
+        return error.__class__.__name__
+
+    first_line = message.splitlines()[0].strip()
+    return first_line[:160]
+
+
+def _extract_openai_token_usage(response):
+    usage = getattr(response, "usage", None)
+    total_tokens = getattr(usage, "total_tokens", None)
+    return total_tokens if isinstance(total_tokens, int) else None
+
+
+def _extract_gemini_token_usage(response):
+    metadata = getattr(response, "usage_metadata", None)
+    total_tokens = getattr(metadata, "total_token_count", None)
+    return total_tokens if isinstance(total_tokens, int) else None
 
 
 def _provider_label(provider):

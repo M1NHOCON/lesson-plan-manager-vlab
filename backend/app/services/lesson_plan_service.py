@@ -28,14 +28,25 @@ def _serialize_lists(data):
 
 
 def create(data):
-    logger.info("Creating lesson plan")
     lesson_plan = create_lesson_plan(_serialize_lists(data))
-    return lesson_plan.to_dict()
+    serialized_lesson_plan = lesson_plan.to_dict()
+    logger.info(
+        'LessonPlan Created: id=%s, title="%s", discipline="%s"',
+        serialized_lesson_plan.get("id"),
+        serialized_lesson_plan.get("title"),
+        serialized_lesson_plan.get("discipline"),
+    )
+    return serialized_lesson_plan
 
 
 def list_all(filters):
-    logger.info("Listing lesson plans")
     result = list_lesson_plans(filters)
+    logger.info(
+        "LessonPlan List: page=%s, per_page=%s, total_items=%s",
+        result.page,
+        result.per_page,
+        result.total,
+    )
 
     return {
         "items": [lesson_plan.to_dict() for lesson_plan in result.items],
@@ -53,26 +64,36 @@ def list_all(filters):
 def get_by_id(lesson_plan_id):
     lesson_plan = get_lesson_plan_by_id(lesson_plan_id)
     if lesson_plan is None:
+        logger.warning("LessonPlan Not Found: id=%s", lesson_plan_id)
         raise LessonPlanNotFoundError("Lesson plan not found")
 
+    logger.info("LessonPlan Retrieved: id=%s", lesson_plan_id)
     return lesson_plan.to_dict()
 
 
 def update(lesson_plan_id, data):
     lesson_plan = get_lesson_plan_by_id(lesson_plan_id)
     if lesson_plan is None:
+        logger.warning("LessonPlan Not Found: id=%s", lesson_plan_id)
         raise LessonPlanNotFoundError("Lesson plan not found")
 
-    logger.info("Updating lesson plan id=%s", lesson_plan_id)
     updated = update_lesson_plan(lesson_plan, _serialize_lists(data))
-    return updated.to_dict()
+    serialized_lesson_plan = updated.to_dict()
+    logger.info(
+        'LessonPlan Updated: id=%s, title="%s", discipline="%s"',
+        serialized_lesson_plan.get("id"),
+        serialized_lesson_plan.get("title"),
+        serialized_lesson_plan.get("discipline"),
+    )
+    return serialized_lesson_plan
 
 
 def delete(lesson_plan_id):
     lesson_plan = get_lesson_plan_by_id(lesson_plan_id)
     if lesson_plan is None:
+        logger.warning("LessonPlan Not Found: id=%s", lesson_plan_id)
         raise LessonPlanNotFoundError("Lesson plan not found")
 
-    logger.info("Deleting lesson plan id=%s", lesson_plan_id)
     delete_lesson_plan(lesson_plan)
+    logger.info("LessonPlan Deleted: id=%s", lesson_plan_id)
     return {"message": "Lesson plan deleted successfully"}
