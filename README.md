@@ -11,9 +11,11 @@ Aplicação web para cadastro, organização e consulta de planos de aula. O sis
 ## Sumário
 
 - [Sobre o projeto](#sobre-o-projeto)
+- [Demonstração da interface](#demonstração-da-interface)
 - [Funcionalidades](#funcionalidades)
 - [Tecnologias utilizadas](#tecnologias-utilizadas)
 - [Arquitetura](#arquitetura)
+- [Diagrama da arquitetura](#diagrama-da-arquitetura)
 - [Estrutura de pastas](#estrutura-de-pastas)
 - [Como executar com Docker](#como-executar-com-docker)
 - [Como executar manualmente](#como-executar-manualmente)
@@ -32,6 +34,16 @@ Aplicação web para cadastro, organização e consulta de planos de aula. O sis
 Este projeto foi desenvolvido para o desafio técnico V-Lab. O objetivo é oferecer uma aplicação completa para gerenciar planos de aula, com backend REST, frontend SPA, persistência em SQLite, documentação via Swagger, execução com Docker e integração com IA para apoio pedagógico.
 
 A aplicação permite que professores ou equipes pedagógicas cadastrem planos, consultem registros com filtros e paginação, editem informações e recebam sugestões automáticas por meio do Smart Assist.
+
+## Demonstração da interface
+
+### Tela inicial
+
+![Tela inicial do Gerenciador de Planos de Aula](docs/images/HomePage.jpg)
+
+### Criação de plano de aula
+
+![Tela de criação de plano de aula](docs/images/CreatePlanPage.jpg)
 
 ## Funcionalidades
 
@@ -109,6 +121,10 @@ O backend foi organizado em camadas:
 - `repositories`: encapsula o acesso ao banco de dados.
 - `models`: define os modelos persistidos com SQLAlchemy.
 - `utils`: reúne utilitários compartilhados, como configuração de logger.
+
+## Diagrama da arquitetura
+
+![Diagrama da arquitetura do Gerenciador de Planos de Aula](docs/images/ArchitectureDiagram.svg)
 
 ## Estrutura de pastas
 
