@@ -145,18 +145,34 @@ lesson-plan-manager-vlab/
 │   │   ├── models.py
 │   │   └── swagger.py
 │   ├── tests/
+│   ├── .dockerignore
+│   ├── .env.example
 │   ├── Dockerfile
+│   ├── pytest.ini
+│   ├── README.md
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   └── run.py
+├── docs/
+│   ├── images/
+│   │   ├── ArchitectureDiagram.svg
+│   │   ├── CreatePlanPage.jpg
+│   │   └── HomePage.jpg
+│   └── architecture-diagram.mmd
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   └── services/
+│   ├── .dockerignore
+│   ├── .env.example
 │   ├── Dockerfile
+│   ├── index.html
+│   ├── package-lock.json
 │   ├── package.json
+│   ├── README.md
 │   └── vite.config.js
+├── .gitignore
 ├── docker-compose.yml
 └── README.md
 ```
