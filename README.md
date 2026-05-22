@@ -154,11 +154,10 @@ lesson-plan-manager-vlab/
 │   ├── requirements-dev.txt
 │   └── run.py
 ├── docs/
-│   ├── images/
-│   │   ├── ArchitectureDiagram.svg
-│   │   ├── CreatePlanPage.jpg
-│   │   └── HomePage.jpg
-│   └── architecture-diagram.mmd
+│   └── images/
+│       ├── ArchitectureDiagram.svg
+│       ├── CreatePlanPage.jpg
+│       └── HomePage.jpg
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
